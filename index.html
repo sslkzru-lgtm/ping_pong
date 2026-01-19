@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-    <title>Пинг-Понг для смартфона</title>
+    <title>Пинг-Понг с улучшенным управлением</title>
     <style>
         * {
             margin: 0;
@@ -38,6 +38,21 @@
             text-shadow: 0 0 10px rgba(255, 255, 255, 0.7);
             z-index: 10;
             font-family: 'Orbitron', sans-serif;
+        }
+        
+        #controlsHint {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 1.2rem;
+            text-align: center;
+            z-index: 10;
+            background: rgba(0, 0, 30, 0.7);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-family: 'Arial', sans-serif;
         }
         
         #startScreen {
@@ -104,6 +119,11 @@
             line-height: 1.5;
         }
         
+        .controlMethod {
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        
         #gameOverScreen {
             position: absolute;
             top: 0;
@@ -150,6 +170,20 @@
             font-weight: bold;
         }
         
+        .touchIndicator {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(77, 166, 255, 0.3);
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            z-index: 5;
+            display: none;
+            border: 2px solid rgba(100, 180, 255, 0.7);
+            box-shadow: 0 0 10px rgba(100, 180, 255, 0.5);
+        }
+        
         @media (max-height: 700px) {
             #gameTitle {
                 font-size: 2.8rem;
@@ -161,6 +195,10 @@
             #gameDescription {
                 font-size: 1rem;
             }
+            #controlsHint {
+                font-size: 1rem;
+                bottom: 10px;
+            }
         }
         
         @media (max-width: 400px) {
@@ -170,6 +208,10 @@
             #scoreDisplay {
                 font-size: 2rem;
             }
+            #controlsHint {
+                font-size: 0.9rem;
+                padding: 6px 12px;
+            }
         }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
@@ -177,6 +219,11 @@
 <body>
     <canvas id="gameCanvas"></canvas>
     <div id="scoreDisplay">0 : 0</div>
+    <div id="controlsHint">
+        <span class="controlMethod">📱 Сенсор: касайтесь выше/ниже ракетки для движения</span>
+        <span class="controlMethod">🖱️ Мышь: зажмите и двигайте курсором</span>
+    </div>
+    <div class="touchIndicator" id="touchIndicator"></div>
     
     <div id="startScreen">
         <h1 id="gameTitle">PING PONG</h1>
@@ -184,7 +231,8 @@
             Соревнуйся с искусственным интеллектом в классическом матче пинг-понга!
         </div>
         <div id="instructions">
-            <p>Проводите пальцем вверх и вниз, чтобы контролировать ракетку</p>
+            <p><span class="controlMethod">📱 На смартфоне:</span> Касайтесь экрана выше ракетки для движения вверх, ниже - для движения вниз</p>
+            <p><span class="controlMethod">🖱️ На компьютере:</span> Зажмите левую кнопку мыши и двигайте курсором</p>
         </div>
         <button id="startButton">НАЧАТЬ ИГРУ</button>
     </div>
@@ -200,21 +248,29 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const scoreDisplay = document.getElementById('scoreDisplay');
+        const controlsHint = document.getElementById('controlsHint');
         const startScreen = document.getElementById('startScreen');
         const startButton = document.getElementById('startButton');
         const gameOverScreen = document.getElementById('gameOverScreen');
         const winnerText = document.getElementById('winnerText');
         const finalScore = document.getElementById('finalScore');
         const restartButton = document.getElementById('restartButton');
+        const touchIndicator = document.getElementById('touchIndicator');
         
-        // Настройка размеров canvas
-        function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        }
+        // Переменные для управления
+        let paddleWidth, paddleHeight, ballSize;
+        let maxPlayerSpeed;
+        let playerY, aiY, ballX, ballY;
+        let ballSpeedX, ballSpeedY;
+        let aiSpeed;
         
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
+        // Статусы управления
+        let isTouchActive = false;
+        let touchStartY = 0;
+        let touchCurrentY = 0;
+        let isMouseDown = false;
+        let mouseY = 0;
+        let lastTouchTime = 0;
         
         // Переменные игры
         let gameRunning = false;
@@ -222,43 +278,104 @@
         let aiScore = 0;
         const WINNING_SCORE = 7;
         
-        // Параметры игры
-        const paddleWidth = canvas.width * 0.01;
-        const paddleHeight = canvas.height * 0.15;
-        const ballSize = canvas.width * 0.02;
+        // Настройка размеров canvas
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            // Адаптируем размеры элементов под новый размер
+            paddleWidth = canvas.width * 0.012;
+            paddleHeight = canvas.height * 0.15;
+            ballSize = canvas.width * 0.02;
+            maxPlayerSpeed = canvas.height * 0.01;
+            aiSpeed = canvas.height * 0.008;
+            
+            // Сбрасываем позиции при изменении размера
+            resetPositions();
+        }
         
-        let playerY = canvas.height / 2 - paddleHeight / 2;
-        let aiY = canvas.height / 2 - paddleHeight / 2;
-        let ballX = canvas.width / 2;
-        let ballY = canvas.height / 2;
-        let ballSpeedX = canvas.width * 0.005;
-        let ballSpeedY = canvas.height * 0.003;
-        let aiSpeed = canvas.height * 0.008;
-        let touchStartY = 0;
-        let touchCurrentY = 0;
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        
+        // Сброс позиций
+        function resetPositions() {
+            playerY = canvas.height / 2 - paddleHeight / 2;
+            aiY = canvas.height / 2 - paddleHeight / 2;
+            ballX = canvas.width / 2 - ballSize / 2;
+            ballY = canvas.height / 2 - ballSize / 2;
+        }
         
         // Обработчики касаний
         canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
         canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
         canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
         
+        // Обработчики мыши
+        canvas.addEventListener('mousedown', handleMouseDown);
+        canvas.addEventListener('mousemove', handleMouseMove);
+        canvas.addEventListener('mouseup', handleMouseUp);
+        canvas.addEventListener('mouseleave', handleMouseUp);
+        
         function handleTouchStart(e) {
             e.preventDefault();
+            const now = Date.now();
+            // Игнорируем быстрые повторные касания
+            if (now - lastTouchTime < 100) return;
+            lastTouchTime = now;
+            
             touchStartY = e.touches[0].clientY;
             touchCurrentY = touchStartY;
+            isTouchActive = true;
+            
+            // Показываем индикатор касания
+            showTouchIndicator(e.touches[0].clientX, e.touches[0].clientY);
         }
         
         function handleTouchMove(e) {
             e.preventDefault();
-            if (gameRunning) {
+            if (gameRunning && isTouchActive) {
                 touchCurrentY = e.touches[0].clientY;
+                showTouchIndicator(e.touches[0].clientX, e.touches[0].clientY);
             }
         }
         
         function handleTouchEnd(e) {
             e.preventDefault();
+            isTouchActive = false;
             touchStartY = 0;
             touchCurrentY = 0;
+            hideTouchIndicator();
+        }
+        
+        function handleMouseDown(e) {
+            if (!gameRunning) return;
+            e.preventDefault();
+            isMouseDown = true;
+            mouseY = e.clientY;
+        }
+        
+        function handleMouseMove(e) {
+            if (gameRunning) {
+                mouseY = e.clientY;
+                if (isMouseDown) {
+                    showTouchIndicator(e.clientX, e.clientY);
+                }
+            }
+        }
+        
+        function handleMouseUp(e) {
+            isMouseDown = false;
+            hideTouchIndicator();
+        }
+        
+        function showTouchIndicator(x, y) {
+            touchIndicator.style.display = 'block';
+            touchIndicator.style.left = `${x}px`;
+            touchIndicator.style.top = `${y}px`;
+        }
+        
+        function hideTouchIndicator() {
+            touchIndicator.style.display = 'none';
         }
         
         // Логика ИИ
@@ -269,7 +386,7 @@
             
             // Коэффициент сложности (0.5 - легкий, 1.0 - сложный)
             const difficulty = 0.75;
-            const adjustedSpeed = aiSpeed * difficulty;
+            let adjustedSpeed = aiSpeed * difficulty;
             
             // ИИ следует за мячом с небольшой задержкой
             if (aiCenter < ballCenter - 15) {
@@ -278,16 +395,43 @@
                 aiY -= adjustedSpeed;
             }
             
+            // Динамическая сложность: ИИ играет лучше, когда отстает
+            if (aiScore < playerScore) {
+                adjustedSpeed *= 1.3;
+            }
+            
             // Границы для ИИ
             aiY = Math.max(0, Math.min(canvas.height - paddleHeight, aiY));
         }
         
-        // Обновление позиции игрока
+        // Обновление позиции игрока с новым управлением
         function updatePlayer() {
-            if (touchCurrentY !== 0) {
-                playerY = touchCurrentY - paddleHeight / 2;
-                playerY = Math.max(0, Math.min(canvas.height - paddleHeight, playerY));
+            let velocity = 0;
+            const paddleCenterY = playerY + paddleHeight / 2;
+            const deadZone = paddleHeight * 0.25; // Зона вокруг ракетки, где она не двигается
+            
+            // Логика для сенсорного управления
+            if (isTouchActive) {
+                if (touchCurrentY < paddleCenterY - deadZone) {
+                    velocity = -maxPlayerSpeed;
+                } else if (touchCurrentY > paddleCenterY + deadZone) {
+                    velocity = maxPlayerSpeed;
+                }
+            } 
+            // Логика для управления мышью
+            else if (isMouseDown) {
+                if (mouseY < paddleCenterY - deadZone) {
+                    velocity = -maxPlayerSpeed;
+                } else if (mouseY > paddleCenterY + deadZone) {
+                    velocity = maxPlayerSpeed;
+                }
             }
+            
+            // Применяем скорость
+            playerY += velocity;
+            
+            // Ограничиваем позицию ракетки
+            playerY = Math.max(0, Math.min(canvas.height - paddleHeight, playerY));
         }
         
         // Обновление мяча
@@ -298,6 +442,7 @@
             // Отскок от верхней и нижней границ
             if (ballY <= 0 || ballY + ballSize >= canvas.height) {
                 ballSpeedY = -ballSpeedY;
+                // Корректируем положение, чтобы мяч не застревал в стене
                 ballY = ballY <= 0 ? 0 : canvas.height - ballSize;
             }
             
@@ -311,8 +456,14 @@
                 const normalizedHit = hitPosition / (paddleHeight/2);
                 const maxAngle = Math.PI/4; // 45 градусов
                 
-                ballSpeedX = Math.abs(ballSpeedX) * 1.05; // Увеличиваем скорость
-                ballSpeedY = normalizedHit * maxAngle * Math.abs(ballSpeedX);
+                // Увеличиваем скорость при ударе
+                ballSpeedX = Math.abs(ballSpeedX) * (1 + Math.abs(normalizedHit) * 0.1) * 1.05;
+                ballSpeedY = normalizedHit * maxAngle * Math.abs(ballSpeedX) * 1.2;
+                
+                // Эффект отскока от центра ракетки
+                if (Math.abs(normalizedHit) < 0.2) {
+                    ballSpeedX *= 0.9; // Уменьшаем скорость при центральном ударе
+                }
             }
             
             // Столкновение с ракеткой ИИ
@@ -325,12 +476,16 @@
                 const normalizedHit = hitPosition / (paddleHeight/2);
                 const maxAngle = Math.PI/4;
                 
-                ballSpeedX = -Math.abs(ballSpeedX) * 1.05; // Увеличиваем скорость
-                ballSpeedY = normalizedHit * maxAngle * Math.abs(ballSpeedX);
+                ballSpeedX = -Math.abs(ballSpeedX) * (1 + Math.abs(normalizedHit) * 0.1) * 1.05;
+                ballSpeedY = normalizedHit * maxAngle * Math.abs(ballSpeedX) * 1.2;
+                
+                if (Math.abs(normalizedHit) < 0.2) {
+                    ballSpeedX *= 0.9;
+                }
             }
             
             // Забитый гол
-            if (ballX < 0) {
+            if (ballX < -ballSize) {
                 aiScore++;
                 updateScore();
                 resetBall();
@@ -351,22 +506,22 @@
         }
         
         function resetBall() {
-            ballX = canvas.width / 2;
-            ballY = canvas.height / 2;
+            ballX = canvas.width / 2 - ballSize / 2;
+            ballY = canvas.height / 2 - ballSize / 2;
             
             // Случайное направление с сохранением преимущества
             const playerLeading = playerScore > aiScore;
             const aiLeading = aiScore > playerScore;
             
             if (playerLeading) {
-                ballSpeedX = -Math.abs(ballSpeedX * 0.8);
+                ballSpeedX = -Math.abs(canvas.width * 0.005);
             } else if (aiLeading) {
-                ballSpeedX = Math.abs(ballSpeedX * 0.8);
+                ballSpeedX = Math.abs(canvas.width * 0.005);
             } else {
-                ballSpeedX = (Math.random() > 0.5 ? 1 : -1) * Math.abs(ballSpeedX * 0.8);
+                ballSpeedX = (Math.random() > 0.5 ? 1 : -1) * Math.abs(canvas.width * 0.005);
             }
             
-            ballSpeedY = (Math.random() > 0.5 ? 1 : -1) * Math.abs(ballSpeedY * 0.8);
+            ballSpeedY = (Math.random() > 0.5 ? 1 : -1) * Math.abs(canvas.height * 0.003);
         }
         
         function endGame() {
@@ -402,23 +557,40 @@
             ctx.setLineDash([]);
             
             // Ракетка игрока (слева)
-            ctx.fillStyle = "#4da6ff";
+            const playerGradient = ctx.createLinearGradient(0, playerY, 0, playerY + paddleHeight);
+            playerGradient.addColorStop(0, "#6ab0ff");
+            playerGradient.addColorStop(0.5, "#4da6ff");
+            playerGradient.addColorStop(1, "#2a80d9");
+            ctx.fillStyle = playerGradient;
+            
+            // Эффект движения ракетки
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "rgba(77, 166, 255, 0.6)";
             ctx.fillRect(0, playerY, paddleWidth, paddleHeight);
+            ctx.shadowBlur = 0;
             
             // Ракетка ИИ (справа)
-            ctx.fillStyle = "#ff6b6b";
+            const aiGradient = ctx.createLinearGradient(0, aiY, 0, aiY + paddleHeight);
+            aiGradient.addColorStop(0, "#ff8a8a");
+            aiGradient.addColorStop(0.5, "#ff6b6b");
+            aiGradient.addColorStop(1, "#d94a4a");
+            ctx.fillStyle = aiGradient;
+            
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "rgba(255, 107, 107, 0.6)";
             ctx.fillRect(canvas.width - paddleWidth, aiY, paddleWidth, paddleHeight);
+            ctx.shadowBlur = 0;
             
             // Мяч
-            const gradient = ctx.createRadialGradient(
-                ballX + ballSize/3, ballY + ballSize/3, 1,
+            const ballGradient = ctx.createRadialGradient(
+                ballX + ballSize/2, ballY + ballSize/2, 1,
                 ballX + ballSize/2, ballY + ballSize/2, ballSize/2
             );
-            gradient.addColorStop(0, "#ffffff");
-            gradient.addColorStop(0.7, "#aaeeff");
-            gradient.addColorStop(1, "#4da6ff");
+            ballGradient.addColorStop(0, "#ffffff");
+            ballGradient.addColorStop(0.7, "#aaeeff");
+            ballGradient.addColorStop(1, "#4da6ff");
             
-            ctx.fillStyle = gradient;
+            ctx.fillStyle = ballGradient;
             ctx.beginPath();
             ctx.arc(ballX + ballSize/2, ballY + ballSize/2, ballSize/2, 0, Math.PI * 2);
             ctx.fill();
@@ -437,25 +609,30 @@
         
         // Декоративные звезды на фоне
         const stars = [];
-        for (let i = 0; i < 100; i++) {
-            stars.push({
-                x: Math.random() * canvas.width,
-                y: Math.random() * canvas.height,
-                size: Math.random() * 2 + 0.5,
-                speed: Math.random() * 0.5 + 0.1
-            });
+        function initStars() {
+            stars.length = 0;
+            const starCount = Math.floor(canvas.width * canvas.height / 5000);
+            for (let i = 0; i < starCount; i++) {
+                stars.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: Math.random() * 2 + 0.5,
+                    speed: Math.random() * 0.5 + 0.1,
+                    opacity: Math.random() * 0.5 + 0.3
+                });
+            }
         }
         
         function drawStars() {
             ctx.fillStyle = "white";
             for (let star of stars) {
-                ctx.globalAlpha = 0.7 + Math.sin(Date.now() * 0.001 * star.speed) * 0.3;
+                ctx.globalAlpha = star.opacity + Math.sin(Date.now() * 0.001 * star.speed) * 0.2;
                 ctx.beginPath();
                 ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
                 ctx.fill();
                 
                 // Движение звезд для эффекта
-                star.y += star.speed;
+                star.y += star.speed * 0.5;
                 if (star.y > canvas.height) {
                     star.y = 0;
                     star.x = Math.random() * canvas.width;
@@ -489,11 +666,11 @@
             aiScore = 0;
             updateScore();
             
-            // Сброс позиций
-            playerY = canvas.height / 2 - paddleHeight / 2;
-            aiY = canvas.height / 2 - paddleHeight / 2;
+            // Инициализация звезд
+            initStars();
             
-            // Сброс мяча
+            // Сброс позиций
+            resetPositions();
             resetBall();
             
             // Установка размеров с учетом текущего окна
@@ -503,6 +680,12 @@
             gameRunning = true;
             gameLoop();
         }
+        
+        // Инициализация игры при загрузке
+        window.addEventListener('load', function() {
+            initStars();
+            draw(); // Первоначальная отрисовка для фона
+        });
     </script>
 </body>
 </html>
