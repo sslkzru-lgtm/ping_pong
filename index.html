@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>Пинг-Понг для смартфона</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            overflow: hidden;
+            background: #1a1a1a;
+            font-family: 'Arial', sans-serif;
+            touch-action: none;
+            position: relative;
+            height: 100vh;
+        }
+        
+        #gameCanvas {
+            display: block;
+            background: linear-gradient(to bottom, #0a0a2a, #1a1a4a);
+            width: 100%;
+            height: 100%;
+        }
+        
+        #scoreDisplay {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-size: 2.5rem;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.7);
+            z-index: 10;
+            font-family: 'Orbitron', sans-serif;
+        }
+        
+        #startScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 10, 42, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        #gameTitle {
+            color: #4da6ff;
+            font-size: 3.5rem;
+            margin-bottom: 20px;
+            text-shadow: 0 0 15px rgba(77, 166, 255, 0.8);
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 2px;
+        }
+        
+        #startButton {
+            background: linear-gradient(to bottom, #4da6ff, #1a5fbf);
+            color: white;
+            border: none;
+            padding: 18px 50px;
+            font-size: 1.8rem;
+            border-radius: 50px;
+            cursor: pointer;
+            margin: 20px;
+            box-shadow: 0 0 20px rgba(77, 166, 255, 0.6);
+            transition: all 0.3s;
+            font-family: 'Arial', sans-serif;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+        
+        #startButton:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 25px rgba(77, 166, 255, 0.8);
+        }
+        
+        #gameDescription {
+            color: #aaa;
+            font-size: 1.2rem;
+            max-width: 80%;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        
+        #instructions {
+            background: rgba(20, 20, 60, 0.8);
+            border-radius: 15px;
+            padding: 15px;
+            margin: 20px 0;
+            color: #ddd;
+            font-size: 1.1rem;
+            line-height: 1.5;
+        }
+        
+        #gameOverScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 10, 42, 0.95);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        #winnerText {
+            color: #ffd700;
+            font-size: 3rem;
+            margin-bottom: 20px;
+            text-shadow: 0 0 15px rgba(255, 215, 0, 0.8);
+            font-family: 'Orbitron', sans-serif;
+        }
+        
+        #finalScore {
+            color: white;
+            font-size: 2.5rem;
+            margin-bottom: 30px;
+            font-family: 'Orbitron', sans-serif;
+        }
+        
+        #restartButton {
+            background: linear-gradient(to bottom, #ff6b6b, #c43e3e);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.5rem;
+            border-radius: 50px;
+            cursor: pointer;
+            margin: 15px;
+            box-shadow: 0 0 20px rgba(255, 107, 107, 0.6);
+            transition: all 0.3s;
+            font-family: 'Arial', sans-serif;
+            font-weight: bold;
+        }
+        
+        @media (max-height: 700px) {
+            #gameTitle {
+                font-size: 2.8rem;
+            }
+            #startButton {
+                padding: 15px 40px;
+                font-size: 1.5rem;
+            }
+            #gameDescription {
+                font-size: 1rem;
+            }
+        }
+        
+        @media (max-width: 400px) {
+            #gameTitle {
+                font-size: 2.5rem;
+            }
+            #scoreDisplay {
+                font-size: 2rem;
+            }
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="scoreDisplay">0 : 0</div>
+    
+    <div id="startScreen">
+        <h1 id="gameTitle">PING PONG</h1>
+        <div id="gameDescription">
+            Соревнуйся с искусственным интеллектом в классическом матче пинг-понга!
+        </div>
+        <div id="instructions">
+            <p>Проводите пальцем вверх и вниз, чтобы контролировать ракетку</p>
+        </div>
+        <button id="startButton">НАЧАТЬ ИГРУ</button>
+    </div>
+    
+    <div id="gameOverScreen">
+        <h2 id="winnerText">ИГРА ОКОНЧЕНА</h2>
+        <div id="finalScore">0 : 0</div>
+        <button id="restartButton">ИГРАТЬ СНОВА</button>
+    </div>
+
+    <script>
+        // Инициализация игры
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const startScreen = document.getElementById('startScreen');
+        const startButton = document.getElementById('startButton');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const winnerText = document.getElementById('winnerText');
+        const finalScore = document.getElementById('finalScore');
+        const restartButton = document.getElementById('restartButton');
+        
+        // Настройка размеров canvas
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        
+        // Переменные игры
+        let gameRunning = false;
+        let playerScore = 0;
+        let aiScore = 0;
+        const WINNING_SCORE = 7;
+        
+        // Параметры игры
+        const paddleWidth = canvas.width * 0.01;
+        const paddleHeight = canvas.height * 0.15;
+        const ballSize = canvas.width * 0.02;
+        
+        let playerY = canvas.height / 2 - paddleHeight / 2;
+        let aiY = canvas.height / 2 - paddleHeight / 2;
+        let ballX = canvas.width / 2;
+        let ballY = canvas.height / 2;
+        let ballSpeedX = canvas.width * 0.005;
+        let ballSpeedY = canvas.height * 0.003;
+        let aiSpeed = canvas.height * 0.008;
+        let touchStartY = 0;
+        let touchCurrentY = 0;
+        
+        // Обработчики касаний
+        canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+        canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+        canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+        
+        function handleTouchStart(e) {
+            e.preventDefault();
+            touchStartY = e.touches[0].clientY;
+            touchCurrentY = touchStartY;
+        }
+        
+        function handleTouchMove(e) {
+            e.preventDefault();
+            if (gameRunning) {
+                touchCurrentY = e.touches[0].clientY;
+            }
+        }
+        
+        function handleTouchEnd(e) {
+            e.preventDefault();
+            touchStartY = 0;
+            touchCurrentY = 0;
+        }
+        
+        // Логика ИИ
+        function updateAI() {
+            const aiCenter = aiY + paddleHeight / 2;
+            const ballCenter = ballY + ballSize / 2;
+            const distance = Math.abs(aiCenter - ballCenter);
+            
+            // Коэффициент сложности (0.5 - легкий, 1.0 - сложный)
+            const difficulty = 0.75;
+            const adjustedSpeed = aiSpeed * difficulty;
+            
+            // ИИ следует за мячом с небольшой задержкой
+            if (aiCenter < ballCenter - 15) {
+                aiY += adjustedSpeed;
+            } else if (aiCenter > ballCenter + 15) {
+                aiY -= adjustedSpeed;
+            }
+            
+            // Границы для ИИ
+            aiY = Math.max(0, Math.min(canvas.height - paddleHeight, aiY));
+        }
+        
+        // Обновление позиции игрока
+        function updatePlayer() {
+            if (touchCurrentY !== 0) {
+                playerY = touchCurrentY - paddleHeight / 2;
+                playerY = Math.max(0, Math.min(canvas.height - paddleHeight, playerY));
+            }
+        }
+        
+        // Обновление мяча
+        function updateBall() {
+            ballX += ballSpeedX;
+            ballY += ballSpeedY;
+            
+            // Отскок от верхней и нижней границ
+            if (ballY <= 0 || ballY + ballSize >= canvas.height) {
+                ballSpeedY = -ballSpeedY;
+                ballY = ballY <= 0 ? 0 : canvas.height - ballSize;
+            }
+            
+            // Столкновение с ракеткой игрока
+            if (ballX <= paddleWidth && 
+                ballY + ballSize > playerY && 
+                ballY < playerY + paddleHeight) {
+                
+                // Рассчитываем угол отскока в зависимости от места удара
+                const hitPosition = (ballY + ballSize/2) - (playerY + paddleHeight/2);
+                const normalizedHit = hitPosition / (paddleHeight/2);
+                const maxAngle = Math.PI/4; // 45 градусов
+                
+                ballSpeedX = Math.abs(ballSpeedX) * 1.05; // Увеличиваем скорость
+                ballSpeedY = normalizedHit * maxAngle * Math.abs(ballSpeedX);
+            }
+            
+            // Столкновение с ракеткой ИИ
+            if (ballX + ballSize >= canvas.width - paddleWidth && 
+                ballY + ballSize > aiY && 
+                ballY < aiY + paddleHeight) {
+                
+                // Рассчитываем угол отскока
+                const hitPosition = (ballY + ballSize/2) - (aiY + paddleHeight/2);
+                const normalizedHit = hitPosition / (paddleHeight/2);
+                const maxAngle = Math.PI/4;
+                
+                ballSpeedX = -Math.abs(ballSpeedX) * 1.05; // Увеличиваем скорость
+                ballSpeedY = normalizedHit * maxAngle * Math.abs(ballSpeedX);
+            }
+            
+            // Забитый гол
+            if (ballX < 0) {
+                aiScore++;
+                updateScore();
+                resetBall();
+            } else if (ballX > canvas.width) {
+                playerScore++;
+                updateScore();
+                resetBall();
+            }
+            
+            // Проверка на окончание игры
+            if (playerScore >= WINNING_SCORE || aiScore >= WINNING_SCORE) {
+                endGame();
+            }
+        }
+        
+        function updateScore() {
+            scoreDisplay.textContent = `${playerScore} : ${aiScore}`;
+        }
+        
+        function resetBall() {
+            ballX = canvas.width / 2;
+            ballY = canvas.height / 2;
+            
+            // Случайное направление с сохранением преимущества
+            const playerLeading = playerScore > aiScore;
+            const aiLeading = aiScore > playerScore;
+            
+            if (playerLeading) {
+                ballSpeedX = -Math.abs(ballSpeedX * 0.8);
+            } else if (aiLeading) {
+                ballSpeedX = Math.abs(ballSpeedX * 0.8);
+            } else {
+                ballSpeedX = (Math.random() > 0.5 ? 1 : -1) * Math.abs(ballSpeedX * 0.8);
+            }
+            
+            ballSpeedY = (Math.random() > 0.5 ? 1 : -1) * Math.abs(ballSpeedY * 0.8);
+        }
+        
+        function endGame() {
+            gameRunning = false;
+            finalScore.textContent = `${playerScore} : ${aiScore}`;
+            
+            if (playerScore > aiScore) {
+                winnerText.textContent = "ВЫ ПОБЕДИЛИ!";
+                winnerText.style.color = "#4dff4d";
+                winnerText.style.textShadow = "0 0 15px rgba(77, 255, 77, 0.8)";
+            } else {
+                winnerText.textContent = "ПОБЕДИЛ ИИ!";
+                winnerText.style.color = "#ff4d4d";
+                winnerText.style.textShadow = "0 0 15px rgba(255, 77, 77, 0.8)";
+            }
+            
+            gameOverScreen.style.display = "flex";
+        }
+        
+        // Отрисовка игровых элементов
+        function draw() {
+            // Очистка canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Центральная сетка
+            ctx.setLineDash([10, 15]);
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(canvas.width / 2, 0);
+            ctx.lineTo(canvas.width / 2, canvas.height);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Ракетка игрока (слева)
+            ctx.fillStyle = "#4da6ff";
+            ctx.fillRect(0, playerY, paddleWidth, paddleHeight);
+            
+            // Ракетка ИИ (справа)
+            ctx.fillStyle = "#ff6b6b";
+            ctx.fillRect(canvas.width - paddleWidth, aiY, paddleWidth, paddleHeight);
+            
+            // Мяч
+            const gradient = ctx.createRadialGradient(
+                ballX + ballSize/3, ballY + ballSize/3, 1,
+                ballX + ballSize/2, ballY + ballSize/2, ballSize/2
+            );
+            gradient.addColorStop(0, "#ffffff");
+            gradient.addColorStop(0.7, "#aaeeff");
+            gradient.addColorStop(1, "#4da6ff");
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(ballX + ballSize/2, ballY + ballSize/2, ballSize/2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Свечение для мяча
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = "rgba(77, 166, 255, 0.7)";
+            ctx.beginPath();
+            ctx.arc(ballX + ballSize/2, ballY + ballSize/2, ballSize/2 + 2, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+            
+            // Декоративные элементы
+            drawStars();
+        }
+        
+        // Декоративные звезды на фоне
+        const stars = [];
+        for (let i = 0; i < 100; i++) {
+            stars.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: Math.random() * 2 + 0.5,
+                speed: Math.random() * 0.5 + 0.1
+            });
+        }
+        
+        function drawStars() {
+            ctx.fillStyle = "white";
+            for (let star of stars) {
+                ctx.globalAlpha = 0.7 + Math.sin(Date.now() * 0.001 * star.speed) * 0.3;
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Движение звезд для эффекта
+                star.y += star.speed;
+                if (star.y > canvas.height) {
+                    star.y = 0;
+                    star.x = Math.random() * canvas.width;
+                }
+            }
+            ctx.globalAlpha = 1.0;
+        }
+        
+        // Игровой цикл
+        function gameLoop() {
+            if (!gameRunning) return;
+            
+            updatePlayer();
+            updateAI();
+            updateBall();
+            draw();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Запуск игры
+        startButton.addEventListener('click', startGame);
+        restartButton.addEventListener('click', startGame);
+        
+        function startGame() {
+            startScreen.style.display = "none";
+            gameOverScreen.style.display = "none";
+            
+            // Сброс счета и позиций
+            playerScore = 0;
+            aiScore = 0;
+            updateScore();
+            
+            // Сброс позиций
+            playerY = canvas.height / 2 - paddleHeight / 2;
+            aiY = canvas.height / 2 - paddleHeight / 2;
+            
+            // Сброс мяча
+            resetBall();
+            
+            // Установка размеров с учетом текущего окна
+            resizeCanvas();
+            
+            // Запуск игры
+            gameRunning = true;
+            gameLoop();
+        }
+    </script>
+</body>
+</html>
